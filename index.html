@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pop Culture Bingo Quiz</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Fredoka', sans-serif;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            transition: background-color 0.5s ease;
+        }
+
+        .font-bangers {
+            font-family: 'Bangers', cursive;
+        }
+
+        /* Comic Book Sunburst Pattern */
+        .sunburst-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: repeating-conic-gradient(
+                from 0deg,
+                rgba(255, 255, 255, 0.15) 0deg 15deg,
+                transparent 15deg 30deg
+            );
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        /* Halftone overlay */
+        .halftone-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-image: radial-gradient(circle at center, rgba(0,0,0,0.2) 2px, transparent 2.5px);
+            background-size: 16px 16px;
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        /* 3D Flip Animation Styles */
+        .flip-container {
+            perspective: 1200px;
+            width: 100%;
+            height: 100%;
+        }
+
+        .flip-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transition: transform 3.5s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transform-style: preserve-3d;
+        }
+
+        .flip-inner.is-flipped {
+            transform: rotateY(1620deg); /* 4.5 spins (180 + 4*360 degrees) */
+        }
+
+        .flip-front, .flip-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 1rem;
+            overflow: hidden;
+        }
+
+        .flip-back {
+            transform: rotateY(180deg);
+        }
+
+        /* Fullscreen Zoom Overlay */
+        #zoom-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(5px);
+            z-index: 50;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        #zoom-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .zoom-content {
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transform: scale(0.7);
+        }
+
+        #zoom-overlay.active .zoom-content {
+            transform: scale(1);
+        }
+    </style>
+</head>
+<body class="bg-blue-500">
+    <div class="sunburst-bg"></div>
+    <div class="halftone-bg"></div>
+
+    <div id="lobby-screen" class="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-yellow-400 bg-opacity-95 backdrop-blur-md">
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,0,0,0.1)_2px,transparent_2px)] bg-[length:16px_16px] pointer-events-none"></div>
+        
+        <div class="bg-white p-8 md:p-12 rounded-3xl border-8 border-black shadow-[16px_16px_0_rgba(0,0,0,1)] text-center max-w-2xl w-[90%] relative transform -rotate-1">
+            <h1 class="text-6xl md:text-8xl font-bangers text-black uppercase tracking-widest drop-shadow-[4px_4px_0_rgba(0,0,0,0.2)] mb-8">BINGO QUIZ</h1>
+            
+            <div class="flex flex-col gap-6 w-full max-w-md mx-auto">
+                <button id="btn-create-room" class="w-full py-5 bg-blue-500 text-white font-bangers text-4xl rounded-2xl border-4 border-black shadow-[6px_6px_0_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-[2px_2px_0_rgba(0,0,0,1)] transition-all tracking-widest uppercase">
+                    START NEW GAME (HOST)
+                </button>
+                
+                <div class="flex items-center gap-4 my-2">
+                    <div class="flex-grow h-1 bg-black"></div>
+                    <span class="font-bangers text-3xl text-black">OR</span>
+                    <div class="flex-grow h-1 bg-black"></div>
+                </div>
+
+                <input type="text" id="join-code-input" placeholder="ENTER 4-LETTER CODE" class="w-full px-6 py-4 rounded-xl text-black text-4xl font-bangers uppercase text-center border-4 border-black focus:outline-none focus:ring-4 focus:ring-red-500 shadow-inner bg-gray-100 placeholder-gray-400">
+                <button id="btn-join-room" class="w-full py-5 bg-red-500 text-white font-bangers text-4xl rounded-2xl border-4 border-black shadow-[6px_6px_0_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-[2px_2px_0_rgba(0,0,0,1)] transition-all tracking-widest uppercase">
+                    JOIN WITH PHONE
+                </button>
+                <p id="lobby-error" class="text-red-600 font-bold text-xl hidden uppercase">Room not found!</p>
+            </div>
+        </div>
+    </div>
+
+    <header id="main-header" class="hidden text-center py-3 md:py-5 bg-white border-b-8 border-black shadow-[0_8px_0_rgba(0,0,0,0.2)] shrink-0 z-10 relative flex-col items-center justify-center">
+        <h1 class="text-5xl md:text-6xl font-bangers tracking-widest text-black drop-shadow-[3px_3px_0_rgba(0,0,0,0.2)] uppercase">Pop Culture Bingo</h1>
+        <div class="flex items-center gap-4 mt-2">
+            <div class="bg-yellow-400 border-4 border-black px-6 py-1 rounded-full shadow-[4px_4px_0_rgba(0,0,0,1)] transform -rotate-1">
+                <p class="text-black text-lg md:text-xl font-bold uppercase tracking-wide">Click a character!</p>
+            </div>
+            <div class="bg-black text-white border-4 border-white px-4 py-1 rounded-full shadow-[4px_4px_0_rgba(0,0,0,0.5)] transform rotate-1">
+                <p class="text-lg md:text-xl font-bangers tracking-widest">ROOM: <span id="display-room-code" class="text-yellow-400">XXXX</span></p>
+            </div>
+        </div>
+    </header>
+
+    <main id="main-content" class="hidden flex-grow items-center justify-center p-4 md:p-8 h-full w-full">
+        <!-- Using aspect-square on children enforces identical size logic -->
+        <div class="grid grid-cols-3 lg:grid-cols-4 gap-3 md:gap-5 w-full max-w-[1050px] pb-4" id="main-grid">
+            <!-- Grid items injected by JS -->
+        </div>
+    </main>
+
+    <div id="zoom-overlay">
+        <div class="zoom-content relative w-[95vw] max-w-5xl h-[85vh] bg-white rounded-2xl border-8 border-black shadow-[12px_12px_0_rgba(0,0,0,1)] flex flex-col p-4 md:p-6">
+            
+            <h2 id="zoom-title" class="text-4xl md:text-6xl font-bangers text-black uppercase tracking-widest text-center mb-4 shrink-0 bg-yellow-400 border-4 border-black py-2 rounded-xl shadow-[4px_4px_0_rgba(0,0,0,1)]">Title</h2>
+            
+            <div class="flip-container flex-grow">
+                <div class="flip-inner" id="reveal-flipper">
+                    
+                    <!-- Front: Question View -->
+                    <div class="flip-front border-4 border-black shadow-[6px_6px_0_rgba(0,0,0,1)] bg-gray-900" id="question-side">
+                        <img id="zoom-question-img" src="" alt="Question" class="w-full h-full object-contain p-2 relative z-0">
+                        
+                        <!-- Dedicated Reveal Button (Bottom Right) - Peer class added to trigger sibling hover -->
+                        <button id="btn-reveal-color" class="peer absolute bottom-4 right-4 md:bottom-6 md:right-6 z-20 bg-yellow-400 text-black border-4 border-black px-4 md:px-6 py-2 md:py-3 rounded-xl shadow-[4px_4px_0_rgba(0,0,0,1)] hover:bg-yellow-300 hover:-translate-y-1 hover:shadow-[6px_6px_0_rgba(0,0,0,1)] transition-all font-bangers text-2xl md:text-3xl tracking-widest uppercase pointer-events-auto">
+                            REVEAL COLOR
+                        </button>
+
+                        <!-- Blurry overlay on hover OVER the peer button ONLY -->
+                        <div class="absolute inset-0 bg-black bg-opacity-40 opacity-0 peer-hover:opacity-100 transition-opacity duration-300 backdrop-blur-sm pointer-events-none z-10"></div>
+                    </div>
+
+                    <!-- Back: Color Reveal -> Input Form -->
+                    <div class="flip-back border-8 border-black shadow-[8px_8px_0_rgba(0,0,0,1)] flex flex-col items-center justify-center relative overflow-hidden" id="reveal-back-bg">
+                        <!-- Halftone for the back of the card -->
+                        <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.3)_2px,transparent_2px)] bg-[length:16px_16px] pointer-events-none"></div>
+
+                        <!-- Mystery Overlay (Hides color during spin) -->
+                        <div id="mystery-overlay" class="absolute inset-0 bg-gray-900 flex flex-col items-center justify-center z-[60] transition-opacity duration-700 ease-in">
+                            <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.1)_2px,transparent_2px)] bg-[length:16px_16px] pointer-events-none"></div>
+                            <span class="text-[8rem] font-bangers text-yellow-400 animate-spin drop-shadow-[4px_4px_0_rgba(0,0,0,1)] [-webkit-text-stroke:3px_black]">???</span>
+                            <span class="text-4xl font-bangers text-white mt-8 tracking-widest animate-pulse drop-shadow-[2px_2px_0_rgba(0,0,0,1)]">ANALYZING...</span>
+                        </div>
+
+                        <!-- Step A: Show Revealed Color -->
+                        <div id="color-reveal-view" class="flex flex-col items-center justify-center w-full h-full cursor-pointer z-10 p-4 text-center">
+                            <h3 class="text-5xl md:text-7xl font-bangers text-white drop-shadow-[4px_4px_0_rgba(0,0,0,1)] [-webkit-text-stroke:2px_black] mb-2">YOU FOUND</h3>
+                            <h2 id="revealed-color-text" class="text-[6rem] md:text-[9rem] font-bangers text-white uppercase drop-shadow-[8px_8px_0_rgba(0,0,0,1)] [-webkit-text-stroke:4px_black] leading-none mb-8">COLOR</h2>
+                            <button id="btn-claim-color" class="bg-white text-black px-8 py-4 rounded-full font-bold text-3xl md:text-4xl border-4 border-black animate-bounce shadow-[6px_6px_0_rgba(0,0,0,1)] font-bangers tracking-wider hover:bg-gray-100">CLICK TO CLAIM!</button>
+                        </div>
+
+                        <!-- Step B: Form Input -->
+                        <div id="input-form-view" class="hidden flex-col items-center justify-center w-full h-full p-6 z-10">
+                            <div class="bg-white w-full max-w-lg rounded-2xl p-8 border-4 border-black shadow-[8px_8px_0_rgba(0,0,0,1)] text-center transform rotate-1">
+                                <h3 class="text-5xl font-bangers text-black mb-6 uppercase tracking-wider">TEAM INFO</h3>
+                                <label class="block text-2xl font-bold text-gray-800 mb-2 uppercase">Enter Team Number:</label>
+                                <input type="number" id="team-number" class="w-full px-4 py-4 rounded-xl text-black text-5xl font-bangers focus:outline-none focus:ring-4 focus:ring-yellow-400 border-4 border-black mb-8 text-center bg-gray-100 shadow-inner" placeholder="#">
+                                <button id="submit-team" class="w-full py-4 bg-yellow-400 text-black font-bangers text-4xl rounded-xl hover:bg-yellow-300 transition-colors border-4 border-black shadow-[6px_6px_0_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-[2px_2px_0_rgba(0,0,0,1)] tracking-widest uppercase">SUBMIT & RETURN</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="bingo-modal" class="fixed inset-0 bg-black bg-opacity-80 z-[100] hidden items-center justify-center backdrop-blur-sm">
+        <div class="bg-white p-10 md:p-16 rounded-3xl shadow-[16px_16px_0_rgba(0,0,0,1)] border-8 border-black flex flex-col items-center text-center max-w-2xl relative transform -rotate-2">
+            <h1 class="text-8xl md:text-9xl font-bangers text-yellow-400 [-webkit-text-stroke:3px_black] drop-shadow-[6px_6px_0_rgba(0,0,0,1)] animate-pulse mb-4">BINGO!</h1>
+            <p class="text-3xl md:text-4xl mb-4 text-black font-bold uppercase">Congratulations Team <span id="bingo-team-num" class="font-bangers text-5xl text-blue-600"></span>!</p>
+            <p class="text-2xl md:text-3xl text-gray-800 font-bold mb-8 uppercase">You collected three <span id="bingo-color-name" class="font-bangers text-4xl text-blue-600"></span> blocks!</p>
+            <div class="w-40 h-40 rounded-full mb-10 shadow-[8px_8px_0_rgba(0,0,0,1)] border-8 border-black" id="bingo-color-display"></div>
+            <button id="close-bingo" class="px-10 py-4 bg-red-500 text-white font-bangers text-4xl rounded-2xl hover:bg-red-400 transition-all border-4 border-black shadow-[6px_6px_0_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-[2px_2px_0_rgba(0,0,0,1)] tracking-widest">CONTINUE QUIZ</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Auth Config
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'pop-culture-bingo-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            // Provide dummy defaults if testing locally outside canvas environment
+            projectId: "dummy-project",
+        };
+        
+        let app, db, auth, user;
+        
+        // Try initialize Firebase
+        try {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+        } catch (e) {
+            console.error("Firebase init failed", e);
+        }
+
+        // DOM Refs
+        const lobbyScreen = document.getElementById('lobby-screen');
+        const mainHeader = document.getElementById('main-header');
+        const mainContent = document.getElementById('main-content');
+        const gridContainer = document.getElementById('main-grid');
+        const displayRoomCode = document.getElementById('display-room-code');
+        const overlay = document.getElementById('zoom-overlay');
+        const colorRevealView = document.getElementById('color-reveal-view');
+        const inputFormView = document.getElementById('input-form-view');
+        const flipper = document.getElementById('reveal-flipper');
+        const revealBackBg = document.getElementById('reveal-back-bg');
+        const teamInput = document.getElementById('team-number');
+        const btnRevealColor = document.getElementById('btn-reveal-color');
+        const btnClaimColor = document.getElementById('btn-claim-color');
+        const submitBtn = document.getElementById('submit-team');
+        const bingoModal = document.getElementById('bingo-modal');
+        const closeBingoBtn = document.getElementById('close-bingo');
+        const lobbyError = document.getElementById('lobby-error');
+        const mysteryOverlay = document.getElementById('mystery-overlay');
+
+        // State Variables
+        let roomRef = null;
+        let localState = null;
+        let unsubscribe = null;
+        let currentRoomCode = null;
+
+        // Visual Setup
+        const comicBgColors = ['#00c3ff', '#ff0066', '#ff9900', '#00e676', '#9d00ff', '#ff3333', '#4CAF50', '#2196F3'];
+        document.body.style.backgroundColor = comicBgColors[Math.floor(Math.random() * comicBgColors.length)];
+
+        async function authenticateUser() {
+            if (!auth) return null;
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                try {
+                    const cred = await signInWithCustomToken(auth, __initial_auth_token);
+                    return cred.user;
+                } catch(e) { console.error(e); }
+            }
+            try {
+                const cred = await signInAnonymously(auth);
+                return cred.user;
+            } catch(e) { console.error(e); return null; }
+        }
+
+        function generateInitialGameState() {
+            const blockNames = [
+                "Spider-Man", "Superman", "Batman", "Iron Man", 
+                "Pikachu", "Doraemon", "Shin-chan", "Tintin", 
+                "Popeye", "Scooby-Doo", "SpongeBob", "Deadpool"
+            ];
+            const colors = ['red', 'green', 'blue', 'yellow'];
+            let blockColors = [];
+            colors.forEach(c => { for(let i=0; i<3; i++) blockColors.push(c); });
+
+            // Shuffle
+            for (let i = blockColors.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [blockColors[i], blockColors[j]] = [blockColors[j], blockColors[i]];
+            }
+
+            return {
+                blocksData: blockNames.map((name, index) => ({
+                    id: index,
+                    name: name,
+                    image: `character-${index + 1}.jpg`,
+                    questionImage: `question-${index + 1}.jpg`,
+                    fallbackImage: `https://placehold.co/600x600/ffffff/000000?text=${encodeURIComponent('character-' + (index+1) + '.jpg')}`,
+                    fallbackQuestion: `https://placehold.co/800x600/ffffff/000000?text=${encodeURIComponent('question-' + (index+1) + '.jpg')}`,
+                    color: blockColors[index],
+                    revealed: false,
+                    teamNumber: null
+                })),
+                step: 'grid', // 'grid', 'question', 'color', 'input', 'bingo'
+                activeBlockId: null,
+                teamScores: {},
+                bingoTeam: null,
+                bingoColor: null
+            };
+        }
+
+        document.getElementById('btn-create-room').addEventListener('click', async () => {
+            user = await authenticateUser();
+            if (!user) return;
+
+            // Generate 4-letter code
+            const code = Array.from({length: 4}, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('');
+            currentRoomCode = code;
+            displayRoomCode.textContent = code;
+            
+            roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', code);
+            await setDoc(roomRef, generateInitialGameState());
+            
+            startGameSync();
+        });
+
+        document.getElementById('btn-join-room').addEventListener('click', async () => {
+            const inputCode = document.getElementById('join-code-input').value.toUpperCase().trim();
+            if(inputCode.length !== 4) return;
+            
+            user = await authenticateUser();
+            if (!user) return;
+
+            const tempRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', inputCode);
+            const docSnap = await getDoc(tempRef);
+            
+            if (docSnap.exists()) {
+                currentRoomCode = inputCode;
+                displayRoomCode.textContent = inputCode;
+                roomRef = tempRef;
+                startGameSync();
+            } else {
+                lobbyError.classList.remove('hidden');
+                setTimeout(() => lobbyError.classList.add('hidden'), 3000);
+            }
+        });
+
+        function startGameSync() {
+            lobbyScreen.classList.add('hidden');
+            mainHeader.classList.remove('hidden');
+            mainHeader.classList.add('flex');
+            mainContent.classList.remove('hidden');
+            mainContent.classList.add('flex');
+
+            unsubscribe = onSnapshot(roomRef, (doc) => {
+                if (doc.exists()) {
+                    localState = doc.data();
+                    renderUIFromState();
+                }
+            }, (error) => {
+                console.error("Sync Error", error);
+            });
+        }
+
+        function renderUIFromState() {
+            if (!localState) return;
+
+            // 1. ALWAYS render the grid so blocks appear and update live
+            renderGrid(localState.blocksData);
+
+            // 2. Handle returning to the main grid view
+            if (localState.step === 'grid') {
+                overlay.classList.remove('active');
+                bingoModal.classList.add('hidden');
+                bingoModal.classList.remove('flex');
+            }
+            else if (localState.step === 'question' || localState.step === 'color' || localState.step === 'input') {
+                setupActiveBlockData(localState.activeBlockId);
+                overlay.classList.add('active');
+                bingoModal.classList.add('hidden');
+                bingoModal.classList.remove('flex');
+
+                if (localState.step === 'question') {
+                    flipper.classList.remove('is-flipped');
+                    mysteryOverlay.classList.remove('opacity-0', 'pointer-events-none');
+                    
+                    colorRevealView.classList.remove('hidden');
+                    colorRevealView.classList.add('flex');
+                    inputFormView.classList.add('hidden');
+                    inputFormView.classList.remove('flex');
+                    teamInput.value = '';
+                } 
+                else if (localState.step === 'color') {
+                    const wasFlipped = flipper.classList.contains('is-flipped');
+                    flipper.classList.add('is-flipped');
+                    
+                    // If state loads and it was already flipped (late join), hide overlay immediately
+                    if (wasFlipped) {
+                        mysteryOverlay.classList.add('opacity-0', 'pointer-events-none');
+                    }
+                    
+                    colorRevealView.classList.remove('hidden');
+                    colorRevealView.classList.add('flex');
+                    inputFormView.classList.add('hidden');
+                    inputFormView.classList.remove('flex');
+                }
+                else if (localState.step === 'input') {
+                    flipper.classList.add('is-flipped');
+                    mysteryOverlay.classList.add('opacity-0', 'pointer-events-none'); // Ensure hidden on reload
+                    colorRevealView.classList.add('hidden');
+                    colorRevealView.classList.remove('flex');
+                    inputFormView.classList.remove('hidden');
+                    inputFormView.classList.add('flex');
+                }
+            }
+            else if (localState.step === 'bingo') {
+                overlay.classList.remove('active');
+                showBingo(localState.bingoTeam, localState.bingoColor);
+            }
+        }
+
+        function renderGrid(blocksData) {
+            gridContainer.innerHTML = '';
+            blocksData.forEach(block => {
+                const blockEl = document.createElement('div');
+                // Crucial Aspect-Square enforcement ensures identical size unrevealed vs revealed
+                blockEl.className = 'w-full aspect-square'; 
+                
+                if (!block.revealed) {
+                    blockEl.innerHTML = `
+                        <div class="relative w-full h-full rounded-[1.5rem] border-[6px] border-black shadow-[8px_8px_0_rgba(0,0,0,1)] overflow-hidden cursor-pointer group bg-white transform transition-all duration-300 hover:-translate-y-3 hover:-translate-x-1 hover:shadow-[14px_14px_0_rgba(0,0,0,1)]" onclick="handleBlockClick(${block.id})">
+                            <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,0,0,0.1)_2px,transparent_2px)] bg-[length:10px_10px]"></div>
+                            <img src="${block.image}" onerror="this.src='${block.fallbackImage}'" alt="${block.name}" class="absolute inset-0 w-full h-full object-cover grayscale-[30%] group-hover:grayscale-0 transition-all duration-500 group-hover:scale-110">
+                            
+                            <div class="absolute bottom-4 left-1/2 -translate-x-1/2 w-[90%] bg-white border-4 border-black p-2 text-center transform -rotate-3 group-hover:rotate-0 transition-transform duration-300 shadow-[4px_4px_0_rgba(0,0,0,1)] rounded-xl z-10">
+                                <span class="font-bangers text-2xl md:text-3xl lg:text-4xl text-black uppercase tracking-wider drop-shadow-[1px_1px_0_rgba(255,255,255,1)]">${block.name}</span>
+                            </div>
+                            
+                            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-5 py-3 border-4 border-black rounded-[2rem] shadow-[6px_6px_0_rgba(0,0,0,1)] opacity-0 group-hover:opacity-100 transition-all duration-300 z-20 pointer-events-none transform -rotate-12 scale-50 group-hover:scale-100">
+                                <span class="font-bangers text-3xl text-red-500 tracking-widest drop-shadow-[1px_1px_0_rgba(0,0,0,1)]">QUIZ!</span>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    let colorClass = '';
+                    switch(block.color) {
+                        case 'red': colorClass = 'bg-red-500'; break;
+                        case 'green': colorClass = 'bg-green-500'; break;
+                        case 'blue': colorClass = 'bg-blue-500'; break;
+                        case 'yellow': colorClass = 'bg-yellow-400'; break;
+                    }
+                    
+                    blockEl.innerHTML = `
+                        <div class="relative w-full h-full rounded-[1.5rem] border-[6px] border-black shadow-[8px_8px_0_rgba(0,0,0,1)] flex flex-col items-center justify-center p-3 md:p-5 ${colorClass} overflow-hidden transform transition-all duration-300 hover:scale-[1.03] hover:shadow-[12px_12px_0_rgba(0,0,0,1)] group">
+                            <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.4)_3px,transparent_3px)] bg-[length:14px_14px] mix-blend-overlay pointer-events-none z-0"></div>
+                            
+                            <div class="bg-white px-4 py-2 border-4 border-black rounded-xl shadow-[4px_4px_0_rgba(0,0,0,1)] mb-2 md:mb-4 w-11/12 text-center truncate transform rotate-2 z-10 relative group-hover:-rotate-1 transition-transform">
+                                <span class="text-xl md:text-2xl lg:text-3xl font-bangers text-black uppercase tracking-widest">${block.name}</span>
+                            </div>
+                            
+                            <span class="text-[5rem] md:text-[7rem] lg:text-[9rem] font-bangers text-white drop-shadow-[8px_8px_0_rgba(0,0,0,1)] [-webkit-text-stroke:3px_black] md:[-webkit-text-stroke:4px_black] leading-none z-10 relative transform -rotate-3 group-hover:rotate-3 transition-transform duration-300 cursor-default">${block.teamNumber}</span>
+                        </div>
+                    `;
+                }
+                gridContainer.appendChild(blockEl);
+            });
+        }
+
+        window.handleBlockClick = async function(id) {
+            if (!user || !roomRef || !localState) return;
+            // Prevent opening a revealed block
+            const block = localState.blocksData.find(b => b.id === id);
+            if (block.revealed) return;
+
+            await updateDoc(roomRef, {
+                activeBlockId: id,
+                step: 'question'
+            });
+        };
+
+        function setupActiveBlockData(id) {
+            if (id === null || !localState) return;
+            const block = localState.blocksData.find(b => b.id === id);
+            if (!block) return;
+
+            document.getElementById('zoom-title').textContent = block.name;
+            const imgEl = document.getElementById('zoom-question-img');
+            imgEl.src = block.questionImage;
+            imgEl.onerror = () => { imgEl.src = block.fallbackQuestion; };
+            
+            let colorClass = '';
+            switch(block.color) {
+                case 'red': colorClass = 'bg-red-500'; break;
+                case 'green': colorClass = 'bg-green-500'; break;
+                case 'blue': colorClass = 'bg-blue-500'; break;
+                case 'yellow': colorClass = 'bg-yellow-400'; break;
+            }
+            
+            revealBackBg.className = `flip-back border-8 border-black shadow-[8px_8px_0_rgba(0,0,0,1)] flex flex-col items-center justify-center relative overflow-hidden ${colorClass}`;
+            document.getElementById('revealed-color-text').textContent = block.color;
+        }
+
+        // Dedicated button triggers reveal
+        btnRevealColor.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!user || !roomRef || !localState) return;
+            await updateDoc(roomRef, { step: 'color' });
+        });
+
+        // Claim color goes to input view
+        btnClaimColor.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!user || !roomRef || !localState) return;
+            await updateDoc(roomRef, { step: 'input' });
+        });
+
+        // Clear mystery overlay when the long spin finishes
+        flipper.addEventListener('transitionend', (e) => {
+            // Only trigger for the transform property of the flipper when it's flipped
+            if (e.target === flipper && e.propertyName === 'transform' && flipper.classList.contains('is-flipped')) {
+                mysteryOverlay.classList.add('opacity-0', 'pointer-events-none');
+            }
+        });
+
+        // Submit form
+        async function handleSubmission() {
+            if (!user || !roomRef || !localState) return;
+
+            const teamNum = parseInt(teamInput.value.trim());
+            if (isNaN(teamNum) || teamNum <= 0) {
+                teamInput.classList.add('ring-4', 'ring-red-500', 'animate-bounce');
+                setTimeout(() => teamInput.classList.remove('ring-4', 'ring-red-500', 'animate-bounce'), 500);
+                return;
+            }
+
+            // Copy deeply to avoid local mutations bypassing Firebase
+            let newBlocksData = JSON.parse(JSON.stringify(localState.blocksData));
+            let newTeamScores = JSON.parse(JSON.stringify(localState.teamScores));
+            
+            const blockIndex = newBlocksData.findIndex(b => b.id === localState.activeBlockId);
+            const color = newBlocksData[blockIndex].color;
+            
+            newBlocksData[blockIndex].revealed = true;
+            newBlocksData[blockIndex].teamNumber = teamNum;
+
+            if (!newTeamScores[teamNum]) newTeamScores[teamNum] = { red: 0, green: 0, blue: 0, yellow: 0 };
+            newTeamScores[teamNum][color]++;
+
+            const isBingo = newTeamScores[teamNum][color] >= 3;
+
+            await updateDoc(roomRef, {
+                blocksData: newBlocksData,
+                teamScores: newTeamScores,
+                step: isBingo ? 'bingo' : 'grid',
+                bingoTeam: isBingo ? teamNum : null,
+                bingoColor: isBingo ? color : null,
+                activeBlockId: isBingo ? localState.activeBlockId : null 
+            });
+        }
+
+        submitBtn.addEventListener('click', handleSubmission);
+        teamInput.addEventListener('keypress', (e) => {
+            if(e.key === 'Enter') handleSubmission();
+        });
+
+        function showBingo(teamNum, color) {
+            document.getElementById('bingo-team-num').textContent = teamNum;
+            document.getElementById('bingo-color-name').textContent = color;
+            
+            const display = document.getElementById('bingo-color-display');
+            display.className = 'w-40 h-40 rounded-full mb-10 shadow-[8px_8px_0_rgba(0,0,0,1)] border-8 border-black';
+            switch(color) {
+                case 'red': display.classList.add('bg-red-500'); break;
+                case 'green': display.classList.add('bg-green-500'); break;
+                case 'blue': display.classList.add('bg-blue-500'); break;
+                case 'yellow': display.classList.add('bg-yellow-400'); break;
+            }
+
+            bingoModal.classList.remove('hidden');
+            bingoModal.classList.add('flex');
+        }
+
+        closeBingoBtn.addEventListener('click', async () => {
+            if (!user || !roomRef || !localState) return;
+            await updateDoc(roomRef, { step: 'grid', activeBlockId: null, bingoTeam: null, bingoColor: null });
+        });
+
+    </script>
+</body>
+</html>
