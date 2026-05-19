@@ -248,14 +248,21 @@
         };
         
         let app, db, auth, user;
+        let isLocalMode = false;
         
         // Try initialize Firebase
         try {
-            app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
+            if (firebaseConfig.projectId === "dummy-project" && !firebaseConfig.apiKey) {
+                console.log("No Firebase config detected. Running in Offline/Local Mode.");
+                isLocalMode = true;
+            } else {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+            }
         } catch (e) {
             console.error("Firebase init failed", e);
+            isLocalMode = true;
         }
 
         // DOM Refs
@@ -338,7 +345,30 @@
             };
         }
 
+        async function updateGameState(updates) {
+            if (isLocalMode) {
+                localState = { ...localState, ...updates };
+                renderUIFromState();
+            } else {
+                if (!roomRef) return;
+                await updateDoc(roomRef, updates);
+            }
+        }
+
         document.getElementById('btn-create-room').addEventListener('click', async () => {
+            if (isLocalMode) {
+                currentRoomCode = "LOCAL";
+                displayRoomCode.textContent = "LOCAL";
+                localState = generateInitialGameState();
+                lobbyScreen.classList.add('hidden');
+                mainHeader.classList.remove('hidden');
+                mainHeader.classList.add('flex');
+                mainContent.classList.remove('hidden');
+                mainContent.classList.add('flex');
+                renderUIFromState();
+                return;
+            }
+
             user = await authenticateUser();
             if (!user) return;
 
@@ -354,6 +384,11 @@
         });
 
         document.getElementById('btn-join-room').addEventListener('click', async () => {
+            if (isLocalMode) {
+                alert("Multiplayer 'Join' requires a Firebase Database. Please use 'START NEW GAME (HOST)' to play locally on this device!");
+                return;
+            }
+
             const inputCode = document.getElementById('join-code-input').value.toUpperCase().trim();
             if(inputCode.length !== 4) return;
             
@@ -496,12 +531,12 @@
         }
 
         window.handleBlockClick = async function(id) {
-            if (!user || !roomRef || !localState) return;
+            if (!localState) return;
             // Prevent opening a revealed block
             const block = localState.blocksData.find(b => b.id === id);
             if (block.revealed) return;
 
-            await updateDoc(roomRef, {
+            await updateGameState({
                 activeBlockId: id,
                 step: 'question'
             });
@@ -532,15 +567,15 @@
         // Dedicated button triggers reveal
         btnRevealColor.addEventListener('click', async (e) => {
             e.stopPropagation();
-            if (!user || !roomRef || !localState) return;
-            await updateDoc(roomRef, { step: 'color' });
+            if (!localState) return;
+            await updateGameState({ step: 'color' });
         });
 
         // Claim color goes to input view
         btnClaimColor.addEventListener('click', async (e) => {
             e.stopPropagation();
-            if (!user || !roomRef || !localState) return;
-            await updateDoc(roomRef, { step: 'input' });
+            if (!localState) return;
+            await updateGameState({ step: 'input' });
         });
 
         // Clear mystery overlay when the long spin finishes
@@ -553,7 +588,7 @@
 
         // Submit form
         async function handleSubmission() {
-            if (!user || !roomRef || !localState) return;
+            if (!localState) return;
 
             const teamNum = parseInt(teamInput.value.trim());
             if (isNaN(teamNum) || teamNum <= 0) {
@@ -577,7 +612,7 @@
 
             const isBingo = newTeamScores[teamNum][color] >= 3;
 
-            await updateDoc(roomRef, {
+            await updateGameState({
                 blocksData: newBlocksData,
                 teamScores: newTeamScores,
                 step: isBingo ? 'bingo' : 'grid',
@@ -610,8 +645,8 @@
         }
 
         closeBingoBtn.addEventListener('click', async () => {
-            if (!user || !roomRef || !localState) return;
-            await updateDoc(roomRef, { step: 'grid', activeBlockId: null, bingoTeam: null, bingoColor: null });
+            if (!localState) return;
+            await updateGameState({ step: 'grid', activeBlockId: null, bingoTeam: null, bingoColor: null });
         });
 
     </script>
